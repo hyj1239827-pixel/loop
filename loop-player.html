@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="구간반복">
+<meta name="theme-color" content="#0f1115">
+<title>구간반복 플레이어</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#0f1115;color:#e9ebef;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;font-size:16px}
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) calc(env(safe-area-inset-bottom) + 40px) env(safe-area-inset-left)}
+.wrap{max-width:720px;margin:0 auto;padding:12px}
+h1{font-size:18px;margin:4px 0 12px}
+.row{display:flex;gap:8px;align-items:center}
+input,select,button,textarea{font:inherit;color:inherit}
+input[type=text],input:not([type]),textarea,select{background:#1a1d24;border:1px solid #2b303a;border-radius:10px;padding:10px 12px;min-width:0}
+textarea{width:100%;min-height:90px;font-size:13px}
+button{background:#262b36;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+button:active{background:#323949}
+button.pri{background:#3b6cff}
+button.sm{padding:8px 10px;font-size:13px}
+button.danger{background:#3a2226;color:#ff9aa6}
+.grow{flex:1}
+#playerBox{position:sticky;top:0;z-index:5;background:#0f1115;padding:6px 0}
+#playerWrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+#playerWrap iframe,#playerWrap #player{position:absolute;inset:0;width:100%;height:100%}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.bar label{font-size:13px;color:#9aa3b2}
+.vtitle{font-size:14px;color:#9aa3b2;margin:6px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec{background:#161a21;border:1px solid #232834;border-radius:12px;padding:8px;margin:8px 0}
+.sec.active{border-color:#3b6cff;background:#18213a}
+.sec .top{display:flex;gap:6px;align-items:stretch}
+.sec .play{flex:1;display:flex;align-items:center;gap:10px;text-align:left;background:transparent;padding:10px 8px;min-width:0}
+.sec .idx{font-size:18px;width:24px;text-align:center}
+.sec .nm{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sec .tm{font-size:12px;color:#9aa3b2;white-space:nowrap}
+.nameinput{flex:1;font-weight:600}
+.sec .times{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}
+.ti{width:72px;text-align:center;padding:8px 6px}
+.empty{color:#7c8596;font-size:14px;padding:16px 4px}
+details{margin:14px 0;background:#161a21;border:1px solid #232834;border-radius:12px;padding:4px 12px}
+summary{padding:10px 0;cursor:pointer;color:#c5cbd6}
+.vitem{display:flex;gap:8px;align-items:center;margin:8px 0}
+.vitem .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;background:transparent;padding:8px 4px}
+.vitem.cur .nm{color:#7fa2ff;font-weight:600}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 24px);transform:translateX(-50%);background:#2a3040;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
+#toast.show{opacity:1}
+.hint{font-size:12px;color:#7c8596;margin:6px 2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔁 구간반복 플레이어</h1>
+
+  <div class="row">
+    <input id="url" class="grow" type="text" placeholder="유튜브 링크 붙여넣기" inputmode="url" autocapitalize="off" autocorrect="off">
+    <button id="addVideo" class="pri">추가</button>
+  </div>
+
+  <div id="main" hidden>
+    <div id="playerBox">
+      <div id="playerWrap"><div id="player"></div></div>
+    </div>
+    <div id="vtitle" class="vtitle"></div>
+
+    <div class="bar">
+      <label>속도</label>
+      <select id="rate">
+        <option value="0.5">0.5x</option>
+        <option value="0.75">0.75x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.25">1.25x</option>
+        <option value="1.5">1.5x</option>
+      </select>
+      <button id="split" class="sm">✂ 여기서 끊기</button>
+      <button id="addSec" class="sm">+ 구간 추가</button>
+    </div>
+    <div class="bar">
+      <input id="nsplit" type="text" inputmode="numeric" value="5" style="width:56px;text-align:center;padding:8px">
+      <button id="equal" class="sm">등분으로 나누기</button>
+      <span class="hint">영상 길이를 균등하게 나눠요</span>
+    </div>
+
+    <div id="sections"></div>
+  </div>
+
+  <details id="vlist">
+    <summary id="vlistSummary">내 영상</summary>
+    <div id="videos"></div>
+  </details>
+
+  <details>
+    <summary>백업 / 복원</summary>
+    <textarea id="backup" placeholder="내보내기를 누르면 저장 데이터가 여기 나와요. 복원할 땐 여기에 붙여넣고 '가져오기'."></textarea>
+    <div class="row" style="margin:8px 0 10px">
+      <button id="export" class="sm">내보내기</button>
+      <button id="import" class="sm">가져오기</button>
+    </div>
+    <div class="hint">브라우저 데이터를 지우면 저장한 구간이 사라질 수 있어요. 가끔 내보내서 메모장에 복사해두세요.</div>
+  </details>
+</div>
+<div id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+var KEY='looplayer.v1';
+var data={videos:[],cur:-1,rate:1};
+var active=-1, editing=-1;
+var player=null, playerReady=false, apiReady=false;
+var equalArmed=false, equalTimer=null;
+
+function $(id){return document.getElementById(id);}
+function h(tag,attrs){
+  var e=document.createElement(tag);
+  attrs=attrs||{};
+  Object.keys(attrs).forEach(function(k){
+    var v=attrs[k];
+    if(k==='class')e.className=v;
+    else if(k.indexOf('on')===0)e.addEventListener(k.slice(2),v);
+    else if(k==='value'||k==='placeholder'||k==='type'||k==='inputMode'||k==='title')e[k]=v;
+    else e.setAttribute(k,v);
+  });
+  for(var i=2;i<arguments.length;i++){
+    var kid=arguments[i];
+    if(kid==null)continue;
+    e.append(kid);
+  }
+  return e;
+}
+function load(){
+  try{var r=localStorage.getItem(KEY);if(r){var d=JSON.parse(r);if(d&&Array.isArray(d.videos)){data=d;if(typeof data.rate!=='number')data.rate=1;}}}catch(e){}
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){}}
+var toastT=null;
+function msg(t){var el=$('toast');el.textContent=t;el.classList.add('show');clearTimeout(toastT);toastT=setTimeout(function(){el.classList.remove('show');},2200);}
+
+function pad2(n){return n<10?'0'+n:''+n;}
+function fmt(t){
+  if(!t||t<0)return '0:00';
+  t=Math.round(t*10)/10;
+  var hh=Math.floor(t/3600), mm=Math.floor((t-hh*3600)/60);
+  var s=Math.round((t-hh*3600-mm*60)*10)/10;
+  var ss=(s<10?'0':'')+(Number.isInteger(s)?s:s.toFixed(1));
+  return hh?(hh+':'+pad2(mm)+':'+ss):(mm+':'+ss);
+}
+function parseTime(str){
+  str=(str||'').trim();
+  if(str==='')return 0;
+  var parts=str.split(':');
+  if(parts.length>3)return null;
+  var total=0;
+  for(var i=0;i<parts.length;i++){
+    var n=Number(parts[i]);
+    if(!isFinite(n)||n<0)return null;
+    total=total*60+n;
+  }
+  return Math.round(total*10)/10;
+}
+function parseVideoId(s){
+  s=(s||'').trim();
+  if(/^[\w-]{11}$/.test(s))return s;
+  var m=s.match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/);
+  return m?m[1]:null;
+}
+function curVideo(){return data.cur>=0?data.videos[data.cur]:null;}
+function nowT(){return Math.round(player.getCurrentTime()*10)/10;}
+
+/* ---------- YouTube player ---------- */
+var tag=document.createElement('script');
+tag.src='https://www.youtube.com/iframe_api';
+tag.onerror=function(){msg('유튜브 플레이어를 불러오지 못했어요');};
+document.head.appendChild(tag);
+window.onYouTubeIframeAPIReady=function(){apiReady=true;if(curVideo())ensurePlayer();};
+
+function ensurePlayer(){
+  var v=curVideo();
+  if(!v||!apiReady)return;
+  if(player){
+    playerReady&&player.cueVideoById(v.id);
+    return;
+  }
+  player=new YT.Player('player',{
+    videoId:v.id,
+    playerVars:{playsinline:1,rel:0,modestbranding:1},
+    events:{
+      onReady:function(){playerReady=true;player.setPlaybackRate(data.rate||1);},
+      onStateChange:onState,
+      onError:function(e){msg('재생 오류 ('+e.data+') — 임베드가 막힌 영상일 수 있어요');}
+    }
+  });
+}
+function onState(e){
+  var v=curVideo();
+  if(!v)return;
+  if(!v.name){
+    try{var t=player.getVideoData().title;if(t){v.name=t;save();renderTitle();renderVideos();}}catch(x){}
+  }
+  if(e.data===YT.PlayerState.ENDED&&active>=0&&v.sections[active]){
+    player.seekTo(v.sections[active].start,true);
+    player.playVideo();
+  }
+  if(e.data===YT.PlayerState.PLAYING){
+    try{player.setPlaybackRate(data.rate||1);}catch(x){}
+  }
+}
+setInterval(function(){
+  if(!player||!playerReady||active<0)return;
+  var v=curVideo();
+  if(!v||!v.sections[active])return;
+  var s=v.sections[active];
+  var st;
+  try{st=player.getPlayerState();}catch(e){return;}
+  if(st!==YT.PlayerState.PLAYING)return;
+  var end=s.end>0?s.end:player.getDuration();
+  if(!(end>s.start))return;
+  if(player.getCurrentTime()>=end-0.15){
+    player.seekTo(s.start,true);
+  }
+},150);
+
+function setMedia(){
+  var v=curVideo();
+  if(!v||active<0||!('mediaSession' in navigator))return;
+  try{
+    var s=v.sections[active];
+    navigator.mediaSession.metadata=new MediaMetadata({title:s.name||('구간 '+(active+1)),artist:v.name||'구간반복'});
+    navigator.mediaSession.setActionHandler('play',function(){player&&player.playVideo();});
+    navigator.mediaSession.setActionHandler('pause',function(){player&&player.pauseVideo();});
+  }catch(e){}
+}
+
+/* ---------- actions ---------- */
+function addVideo(){
+  var id=parseVideoId($('url').value);
+  if(!id){msg('유튜브 링크를 확인해주세요');return;}
+  var idx=-1;
+  data.videos.forEach(function(v,i){if(v.id===id)idx=i;});
+  if(idx<0){data.videos.push({id:id,name:'',sections:[]});idx=data.videos.length-1;}
+  $('url').value='';
+  openVideo(idx);
+}
+function openVideo(i){
+  data.cur=i;active=-1;editing=-1;save();
+  renderAll();
+  if(apiReady)ensurePlayer();
+  $('vlist').open=false;
+}
+function playSection(i){
+  var v=curVideo();
+  if(!v||!player||!playerReady){msg('플레이어 준비 중이에요');return;}
+  active=i;
+  var s=v.sections[i];
+  player.seekTo(s.start,true);
+  player.playVideo();
+  setMedia();
+  renderSections();
+}
+function addSection(){
+  var v=curVideo();if(!v)return;
+  v.sections.push({name:'구간 '+(v.sections.length+1),start:0,end:0});
+  save();renderSections();
+}
+function splitHere(){
+  var v=curVideo();
+  if(!v||!playerReady){msg('플레이어 준비 중이에요');return;}
+  var t=nowT(), dur=player.getDuration();
+  if(t<=0.5){msg('끊을 위치까지 재생하거나 이동해주세요');return;}
+  if(!v.sections.length){
+    v.sections.push({name:'구간 1',start:0,end:t},{name:'구간 2',start:t,end:0});
+  }else{
+    var idx=-1;
+    v.sections.forEach(function(s,i){
+      var e=s.end>0?s.end:dur;
+      if(idx<0&&t>s.start+0.3&&t<e-0.3)idx=i;
+    });
+    if(idx<0){msg('이 위치는 기존 구간의 안쪽이 아니에요');return;}
+    var s=v.sections[idx], oldEnd=s.end;
+    s.end=t;
+    v.sections.splice(idx+1,0,{name:'구간 '+(v.sections.length+1),start:t,end:oldEnd});
+    if(active>idx)active++;
+  }
+  save();renderSections();
+}
+function equalSplit(){
+  var v=curVideo();
+  if(!v||!playerReady){msg('플레이어 준비 중이에요');return;}
+  var n=parseInt($('nsplit').value,10);
+  var dur=player.getDuration();
+  if(!(n>=2&&n<=60)){msg('2~60 사이 숫자를 넣어주세요');return;}
+  if(!(dur>0)){msg('영상 길이를 아직 몰라요. 재생을 한번 시작해보세요');return;}
+  if(v.sections.length&&!equalArmed){
+    equalArmed=true;
+    $('equal').textContent='기존 구간 덮어쓰기 — 한번 더';
+    clearTimeout(equalTimer);
+    equalTimer=setTimeout(function(){equalArmed=false;$('equal').textContent='등분으로 나누기';},3000);
+    return;
+  }
+  equalArmed=false;$('equal').textContent='등분으로 나누기';
+  var step=dur/n, secs=[];
+  for(var i=0;i<n;i++){
+    secs.push({name:'구간 '+(i+1),start:Math.round(i*step*10)/10,end:i===n-1?0:Math.round((i+1)*step*10)/10});
+  }
+  v.sections=secs;active=-1;save();renderSections();
+}
+function deleteSection(i){
+  var v=curVideo();if(!v)return;
+  v.sections.splice(i,1);
+  if(active===i)active=-1;else if(active>i)active--;
+  save();renderSections();
+}
+function deleteVideo(i){
+  data.videos.splice(i,1);
+  if(data.cur===i){
+    data.cur=-1;active=-1;
+    try{player&&playerReady&&player.stopVideo();}catch(e){}
+  }else if(data.cur>i)data.cur--;
+  save();renderAll();
+}
+
+/* ---------- render ---------- */
+function renderTitle(){
+  var v=curVideo();
+  $('vtitle').textContent=v?(v.name||v.id):'';
+}
+function renderVideos(){
+  var box=$('videos');box.textContent='';
+  $('vlistSummary').textContent='내 영상 ('+data.videos.length+')';
+  if(!data.videos.length){box.append(h('div',{class:'empty'},'위에 유튜브 링크를 붙여넣어 추가하세요.'));return;}
+  data.videos.forEach(function(v,i){
+    box.append(h('div',{class:'vitem'+(i===data.cur?' cur':'')},
+      h('button',{class:'nm',onclick:function(){openVideo(i);}},(v.name||v.id)+'  ·  구간 '+v.sections.length),
+      h('button',{class:'sm danger',onclick:function(){deleteVideo(i);},title:'삭제'},'🗑')
+    ));
+  });
+}
+function timeInput(val,placeholder,onSet){
+  var inp=h('input',{class:'ti',type:'text',inputMode:'decimal',value:val?fmt(val):'',placeholder:placeholder});
+  inp.addEventListener('change',function(){
+    var t=parseTime(inp.value);
+    if(t==null){inp.value=val?fmt(val):'';msg('시간 형식: 1:23 또는 1:02:03');return;}
+    onSet(t);
+  });
+  return inp;
+}
+function renderSections(){
+  var box=$('sections');box.textContent='';
+  var v=curVideo();
+  if(!v)return;
+  if(!v.sections.length){
+    box.append(h('div',{class:'empty'},'구간이 없어요. 재생하다가 "✂ 여기서 끊기"를 누르거나, 등분으로 나눠보세요.'));
+    return;
+  }
+  v.sections.forEach(function(s,i){
+    var top=h('div',{class:'top'});
+    if(editing===i){
+      var inp=h('input',{class:'nameinput',type:'text',value:s.name});
+      var done=function(){s.name=inp.value.trim()||('구간 '+(i+1));editing=-1;save();renderSections();if(active===i)setMedia();};
+      inp.addEventListener('blur',done,{once:true});
+      inp.addEventListener('keydown',function(e){if(e.key==='Enter')inp.blur();});
+      top.append(inp);
+    }else{
+      top.append(h('button',{class:'play',onclick:function(){playSection(i);}},
+        h('span',{class:'idx'},i===active?'🔁':'▶'),
+        h('span',{class:'nm'},s.name||('구간 '+(i+1))),
+        h('span',{class:'tm'},fmt(s.start)+' – '+(s.end?fmt(s.end):'끝'))
+      ));
+      top.append(h('button',{class:'sm',title:'이름 바꾸기',onclick:function(){editing=i;renderSections();}},'✎'));
+      top.append(h('button',{class:'sm danger',title:'삭제',onclick:function(){deleteSection(i);}},'🗑'));
+    }
+    var times=h('div',{class:'times'},
+      h('span',{class:'hint'},'시작'),
+      timeInput(s.start,'0:00',function(t){s.start=t;save();renderSections();}),
+      h('button',{class:'sm',onclick:function(){if(!playerReady)return;s.start=nowT();save();renderSections();}},'지금'),
+      h('span',{class:'hint'},'끝'),
+      timeInput(s.end,'끝',function(t){s.end=t;save();renderSections();}),
+      h('button',{class:'sm',onclick:function(){if(!playerReady)return;s.end=nowT();save();renderSections();}},'지금')
+    );
+    box.append(h('div',{class:'sec'+(i===active?' active':'')},top,times));
+  });
+  if(editing>=0){var el=box.querySelector('.nameinput');if(el){el.focus();el.select();}}
+}
+function renderAll(){
+  $('main').hidden=!curVideo();
+  $('rate').value=String(data.rate||1);
+  renderTitle();renderVideos();renderSections();
+}
+
+/* ---------- wiring ---------- */
+$('addVideo').addEventListener('click',addVideo);
+$('url').addEventListener('keydown',function(e){if(e.key==='Enter')addVideo();});
+$('addSec').addEventListener('click',addSection);
+$('split').addEventListener('click',splitHere);
+$('equal').addEventListener('click',equalSplit);
+$('rate').addEventListener('change',function(){
+  data.rate=parseFloat($('rate').value)||1;save();
+  try{player&&playerReady&&player.setPlaybackRate(data.rate);}catch(e){}
+});
+$('export').addEventListener('click',function(){
+  var txt=JSON.stringify(data);
+  $('backup').value=txt;
+  try{navigator.clipboard.writeText(txt).then(function(){msg('복사했어요');},function(){msg('아래 글을 직접 복사해주세요');});}
+  catch(e){msg('아래 글을 직접 복사해주세요');}
+});
+$('import').addEventListener('click',function(){
+  try{
+    var d=JSON.parse($('backup').value);
+    if(!d||!Array.isArray(d.videos))throw new Error('bad');
+    data=d;if(typeof data.rate!=='number')data.rate=1;
+    if(!(data.cur<data.videos.length))data.cur=-1;
+    active=-1;save();renderAll();if(apiReady)ensurePlayer();
+    msg('가져왔어요');
+  }catch(e){msg('데이터 형식이 올바르지 않아요');}
+});
+
+load();
+renderAll();
+if(!data.videos.length)$('vlist').open=true;
+})();
+</script>
+</body>
+</html>
